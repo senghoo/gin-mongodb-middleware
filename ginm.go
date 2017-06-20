@@ -90,7 +90,10 @@ func (b *Blueprint) New(c *gin.Context) {
 	}
 	coll := b.coll(c)
 	if i, ok := inst.(PreCreate); ok {
-		i.PreCreate()
+
+		if err := i.PreCreate(); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 
 	err = coll.Insert(inst)
@@ -100,7 +103,9 @@ func (b *Blueprint) New(c *gin.Context) {
 	}
 
 	if i, ok := inst.(PostCreate); ok {
-		i.PostCreate()
+		if err := i.PostCreate(); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 
 	c.Status(http.StatusCreated)
@@ -189,7 +194,9 @@ func (b *Blueprint) Update(c *gin.Context) {
 	}
 
 	if i, ok := inst.(PreUpdate); ok {
-		i.PreUpdate()
+		if err := i.PreUpdate(); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 
 	coll := b.coll(c)
@@ -199,13 +206,19 @@ func (b *Blueprint) Update(c *gin.Context) {
 		return
 	}
 
-	if i, ok := inst.(PostUpdate); ok {
-		i.PostUpdate(inst)
-	}
+	pre := inst
+	instValue = reflect.New(b.t)
+	inst = instValue.Interface()
 	err = coll.FindId(id).One(inst)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
+	}
+
+	if i, ok := inst.(PostUpdate); ok {
+		if err := i.PostUpdate(pre); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 	c.JSON(http.StatusCreated, inst)
 }
@@ -234,7 +247,9 @@ func (b *Blueprint) Patch(c *gin.Context) {
 	}
 
 	if i, ok := inst.(PreUpdate); ok {
-		i.PreUpdate()
+		if err := i.PreUpdate(); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 	err = coll.UpdateId(id, bson.M{"$set": data})
 	if err != nil {
@@ -242,6 +257,7 @@ func (b *Blueprint) Patch(c *gin.Context) {
 		return
 	}
 
+	pre := inst
 	instValue = reflect.New(b.t)
 	inst = instValue.Interface()
 	err = coll.FindId(id).One(inst)
@@ -251,7 +267,9 @@ func (b *Blueprint) Patch(c *gin.Context) {
 	}
 
 	if i, ok := inst.(PostUpdate); ok {
-		i.PostUpdate()
+		if err := i.PostUpdate(pre); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 	c.JSON(http.StatusCreated, inst)
 }
@@ -262,11 +280,30 @@ func (b *Blueprint) Delete(c *gin.Context) {
 		c.AbortWithError(http.StatusNotFound, fmt.Errorf("not found %s", id))
 		return
 	}
+
 	coll := b.coll(c)
-	err := coll.RemoveId(id)
+	instValue := reflect.New(b.t)
+	inst := instValue.Interface()
+	err := coll.FindId(id).One(inst)
+	if err != nil {
+		c.AbortWithError(http.StatusNotFound, err)
+		return
+	}
+
+	if i, ok := inst.(PreDelete); ok {
+		if err := i.PreDelete(); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
+	}
+	err = coll.RemoveId(id)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
+	}
+	if i, ok := inst.(PostDelete); ok {
+		if err := i.PostDelete(); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+		}
 	}
 
 	c.Status(http.StatusNoContent)
