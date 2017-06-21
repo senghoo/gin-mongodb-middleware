@@ -5,14 +5,18 @@ import (
 	mgo "gopkg.in/mgo.v2"
 )
 
-var db *mgo.Database
-
-func SetDB(d *mgo.Database) {
-	db = d
+type Middleware struct {
+	session *mgo.Session
 }
 
-func Connect(c *gin.Context) {
-	s := db.Session.Clone()
+func NewMiddleware(session *mgo.Session) *Middleware {
+	return &Middleware{
+		session: session,
+	}
+}
+
+func (m *Middleware) Connect(c *gin.Context) {
+	s := m.session.Clone()
 
 	defer s.Close()
 
