@@ -1,6 +1,7 @@
 package ginm_test
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	mgo "gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/gavv/httpexpect"
 	"github.com/gin-gonic/gin"
@@ -24,13 +26,19 @@ var server *httptest.Server
 var session *mgo.Session
 
 type Article struct {
-	Title   string
-	Content string
-	Tag     []string
+	ID      bson.ObjectId `json:"id,omitempty" bson:"_id,omitempty"`
+	Title   string        `json:"title" bson:"title"`
+	Content string        `json:"content" bson:"content"`
+	Tag     []string      `json:"tag" bson:"tag"`
 	Author  struct {
-		Name  string
-		Email string
-	}
+		Name  string `json:"name" bson:"name"`
+		Email string `json:"email" bson:"email"`
+	} `json:"author" bson:"author"`
+}
+
+func (a *Article) PreCreate() error {
+	a.ID = bson.NewObjectId()
+	return nil
 }
 
 func init() {
@@ -59,9 +67,7 @@ func init() {
 func TestMain(m *testing.M) {
 	setup()
 	ret := m.Run()
-	if ret == 0 {
-		teardown()
-	}
+	teardown()
 	os.Exit(ret)
 }
 
@@ -73,7 +79,7 @@ func teardown() {
 	session.Clone().DB(DatabaseName).DropDatabase()
 }
 
-func TestNew(t *testing.T) {
+func TestAPI(t *testing.T) {
 	e := httpexpect.New(t, server.URL)
 
 	article := &Article{
@@ -84,7 +90,84 @@ func TestNew(t *testing.T) {
 	article.Author.Name = "name"
 	article.Author.Email = "name@example.com"
 
+	// new
 	e.POST("/articles/").WithJSON(article).
 		Expect().
 		Status(http.StatusCreated)
+	// list
+	val := e.GET("/articles/").
+		Expect().
+		Status(http.StatusOK).
+		JSON()
+	val.Array().Length().Equal(1)
+	val.Array().First().Object().Value("title").Equal("title")
+	val.Array().First().Object().Value("content").Equal("content")
+	tags := val.Array().First().Object().Value("tag").Array()
+	tags.Length().Equal(2)
+	tags.Element(0).Equal("tag1")
+	tags.Element(1).Equal("tag2")
+	author := val.Array().First().Object().Value("author").Object()
+	author.Value("name").Equal("name")
+	author.Value("email").Equal("name@example.com")
+
+	// get
+	id := val.Array().First().Object().Value("id").String().Raw()
+	articleURI := fmt.Sprintf("/articles/%s", id)
+
+	val = e.GET(articleURI).
+		Expect().
+		Status(http.StatusOK).
+		JSON()
+
+	val.Object().Value("title").Equal("title")
+	val.Object().Value("content").Equal("content")
+	tags = val.Object().Value("tag").Array()
+	tags.Length().Equal(2)
+	tags.Element(0).Equal("tag1")
+	tags.Element(1).Equal("tag2")
+	author = val.Object().Value("author").Object()
+	author.Value("name").Equal("name")
+	author.Value("email").Equal("name@example.com")
+
+	// patch
+	val = e.PATCH(articleURI).WithJSON(map[string]interface{}{
+		"title":       "title2",
+		"tag.1":       "updated_tag",
+		"author.name": "new name",
+	}).Expect().Status(http.StatusOK).JSON()
+
+	val.Object().Value("title").Equal("title2")
+	val.Object().Value("content").Equal("content")
+	tags = val.Object().Value("tag").Array()
+	tags.Length().Equal(2)
+	tags.Element(0).Equal("tag1")
+	tags.Element(1).Equal("updated_tag")
+	author = val.Object().Value("author").Object()
+	author.Value("name").Equal("new name")
+	author.Value("email").Equal("name@example.com")
+
+	// post
+
+	val = e.PUT(articleURI).WithJSON(article).
+		Expect().
+		Status(http.StatusOK).JSON()
+
+	val.Object().Value("title").Equal("title")
+	val.Object().Value("content").Equal("content")
+	tags = val.Object().Value("tag").Array()
+	tags.Length().Equal(2)
+	tags.Element(0).Equal("tag1")
+	tags.Element(1).Equal("tag2")
+	author = val.Object().Value("author").Object()
+	author.Value("name").Equal("name")
+	author.Value("email").Equal("name@example.com")
+
+	// delete
+
+	e.DELETE(articleURI).Expect().Status(http.StatusNoContent)
+
+	e.GET("/articles/").
+		Expect().
+		Status(http.StatusOK).
+		JSON().Array().Length().Equal(1)
 }

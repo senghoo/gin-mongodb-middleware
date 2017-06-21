@@ -144,13 +144,19 @@ func (b *Blueprint) List(c *gin.Context) {
 		query.Sort(sort)
 	}
 
-	res := reflect.New(reflect.SliceOf(reflect.PtrTo(b.t))).Interface()
+	resVal := reflect.New(reflect.SliceOf(reflect.PtrTo(b.t)))
+	res := resVal.Interface()
 	err = query.All(res)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(200, res)
+	fmt.Printf("blablabl %#v\n", resVal.Elem().Interface())
+	if resVal.Elem().Interface() == nil {
+		c.JSON(http.StatusOK, make([]interface{}, 0, 0))
+		return
+	}
+	c.JSON(http.StatusOK, res)
 }
 
 func (b *Blueprint) Get(c *gin.Context) {
@@ -162,7 +168,7 @@ func (b *Blueprint) Get(c *gin.Context) {
 	instValue := reflect.New(b.t)
 	inst := instValue.Interface()
 	coll := b.coll(c)
-	err := coll.FindId(id).One(inst)
+	err := coll.FindId(bson.ObjectIdHex(id)).One(inst)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
@@ -192,7 +198,7 @@ func (b *Blueprint) Update(c *gin.Context) {
 	}
 
 	coll := b.coll(c)
-	err = coll.UpdateId(id, inst)
+	err = coll.UpdateId(bson.ObjectIdHex(id), inst)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
@@ -201,7 +207,7 @@ func (b *Blueprint) Update(c *gin.Context) {
 	pre := inst
 	instValue = reflect.New(b.t)
 	inst = instValue.Interface()
-	err = coll.FindId(id).One(inst)
+	err = coll.FindId(bson.ObjectIdHex(id)).One(inst)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
@@ -212,7 +218,7 @@ func (b *Blueprint) Update(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 	}
-	c.JSON(http.StatusCreated, inst)
+	c.JSON(http.StatusOK, inst)
 }
 
 func (b *Blueprint) Patch(c *gin.Context) {
@@ -225,7 +231,7 @@ func (b *Blueprint) Patch(c *gin.Context) {
 	coll := b.coll(c)
 	instValue := reflect.New(b.t)
 	inst := instValue.Interface()
-	err := coll.FindId(id).One(inst)
+	err := coll.FindId(bson.ObjectIdHex(id)).One(inst)
 	if err != nil {
 		c.AbortWithError(http.StatusNotFound, err)
 		return
@@ -243,7 +249,7 @@ func (b *Blueprint) Patch(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 	}
-	err = coll.UpdateId(id, bson.M{"$set": data})
+	err = coll.UpdateId(bson.ObjectIdHex(id), bson.M{"$set": data})
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
@@ -252,7 +258,7 @@ func (b *Blueprint) Patch(c *gin.Context) {
 	pre := inst
 	instValue = reflect.New(b.t)
 	inst = instValue.Interface()
-	err = coll.FindId(id).One(inst)
+	err = coll.FindId(bson.ObjectIdHex(id)).One(inst)
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
@@ -263,7 +269,7 @@ func (b *Blueprint) Patch(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 	}
-	c.JSON(http.StatusCreated, inst)
+	c.JSON(http.StatusOK, inst)
 }
 
 func (b *Blueprint) Delete(c *gin.Context) {
@@ -276,7 +282,7 @@ func (b *Blueprint) Delete(c *gin.Context) {
 	coll := b.coll(c)
 	instValue := reflect.New(b.t)
 	inst := instValue.Interface()
-	err := coll.FindId(id).One(inst)
+	err := coll.FindId(bson.ObjectIdHex(id)).One(inst)
 	if err != nil {
 		c.AbortWithError(http.StatusNotFound, err)
 		return
@@ -287,7 +293,7 @@ func (b *Blueprint) Delete(c *gin.Context) {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
 	}
-	err = coll.RemoveId(id)
+	err = coll.RemoveId(bson.ObjectIdHex(id))
 	if err != nil {
 		c.AbortWithError(http.StatusBadRequest, err)
 		return
